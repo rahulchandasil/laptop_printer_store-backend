@@ -1,5 +1,6 @@
 const Order = require("../models/order.model.js");
 const Cart = require("../models/cart.model.js");
+const mongoose = require("mongoose");
 
 const createOrder = async (req, res) => {
   try {
@@ -12,27 +13,51 @@ const createOrder = async (req, res) => {
       totalPrice,
     } = req.body;
 
+    const validItems = Array.isArray(items) && items.length > 0 && items.every(
+      (item) =>
+        item &&
+        mongoose.Types.ObjectId.isValid(item.productId) &&
+        Number.isInteger(Number(item.quantity)) &&
+        Number(item.quantity) >= 1
+    );
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid userId is required",
+      });
+    }
+
+    if (!validItems) {
+      return res.status(400).json({
+        success: false,
+        message: "Order items must include valid productId and quantity",
+      });
+    }
+
     if (
-      !userId ||
-      !items ||
-      items.length === 0 ||
-      !name ||
-      !mobile ||
-      !address ||
-      totalPrice === undefined
+      typeof name !== "string" ||
+      !name.trim() ||
+      typeof mobile !== "string" ||
+      !mobile.trim() ||
+      typeof address !== "string" ||
+      !address.trim() ||
+      typeof totalPrice !== "number" ||
+      !Number.isFinite(totalPrice) ||
+      totalPrice < 0
     ) {
       return res.status(400).json({
         success: false,
-        message: "All order details are required",
+        message: "Name, mobile, address, and a valid totalPrice are required",
       });
     }
 
     const order = await Order.create({
       userId,
       items,
-      name,
-      mobile,
-      address,
+      name: name.trim(),
+      mobile: mobile.trim(),
+      address: address.trim(),
       totalPrice,
     });
 
