@@ -21,10 +21,19 @@ const userSchema = new mongoose.Schema(
       required: true,
       minlength: 6,
     },
+    otp: {
+      type: String,
+      default: null,
+    },
+
+    otpExpires: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 module.exports = mongoose.model("User", userSchema);
