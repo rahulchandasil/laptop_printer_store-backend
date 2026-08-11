@@ -1,5 +1,8 @@
 const nodemailer = require("nodemailer");
 
+console.log("EMAIL_USER configured:", Boolean(process.env.EMAIL_USER));
+console.log("EMAIL_PASS configured:", Boolean(process.env.EMAIL_PASS));
+
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -7,6 +10,15 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
+
+const verifyEmailTransporter = async () => {
+  try {
+    await transporter.verify();
+    console.log("SMTP transporter verified");
+  } catch (error) {
+    console.error("SMTP transporter verification failed:", error.message);
+  }
+};
 
 const sendOTPEmail = async (email, otp) => {
   await transporter.sendMail({
@@ -32,3 +44,4 @@ const sendOTPEmail = async (email, otp) => {
 };
 
 module.exports = sendOTPEmail;
+module.exports.verifyEmailTransporter = verifyEmailTransporter;
