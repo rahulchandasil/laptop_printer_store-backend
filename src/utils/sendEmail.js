@@ -11,10 +11,20 @@ const transporter = nodemailer.createTransport({
 
 const verifyEmailTransporter = async () => {
   try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.error(
+        "EMAIL_USER or EMAIL_PASS is not configured"
+      );
+      return false;
+    }
+
     await transporter.verify();
     return true;
   } catch (error) {
-    console.error("SMTP transporter verification failed:", error);
+    console.error(
+      "SMTP transporter verification failed:",
+      error.message
+    );
     return false;
   }
 };
@@ -64,7 +74,7 @@ const sendOTPEmail = async (email, otp) => {
 
     return true;
   } catch (error) {
-    console.error("OTP email failed:", error);
+    console.error("OTP email sending failed:", error.message);
     throw error;
   }
 };
