@@ -1,8 +1,12 @@
 const nodemailer = require("nodemailer");
 
 
+// Use explicit SMTP host/port to prefer IPv4 and STARTTLS (port 587)
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // use STARTTLS
+  requireTLS: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -12,20 +16,15 @@ const transporter = nodemailer.createTransport({
 const verifyEmailTransporter = async () => {
   try {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.error(
-        "EMAIL_USER or EMAIL_PASS is not configured"
-      );
-      return false;
+      console.error("EMAIL_USER or EMAIL_PASS is not configured");
+      return;
     }
 
     await transporter.verify();
-    return true;
+    console.log("SMTP transporter verified");
   } catch (error) {
-    console.error(
-      "SMTP transporter verification failed:",
-      error.message
-    );
-    return false;
+    // Log only the error message to avoid exposing secrets or network details.
+    console.error("SMTP transporter verification failed:", error.message);
   }
 };
 
