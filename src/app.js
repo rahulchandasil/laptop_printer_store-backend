@@ -6,6 +6,7 @@ const authRoutes = require("./routes/auth.routes.js");
 const cartRoutes = require("./routes/cart.routes.js");
 const orderRouter = require("./routes/order.routes.js");
 
+
 const app = express();
 
 app.use(cors());

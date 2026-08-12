@@ -1,83 +1,40 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-
-// Use explicit SMTP host/port to prefer IPv4 and STARTTLS (port 587)
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // use STARTTLS
-  requireTLS: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-const verifyEmailTransporter = async () => {
-  try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.error("EMAIL_USER or EMAIL_PASS is not configured");
-      return;
-    }
-
-    await transporter.verify();
-    console.log("SMTP transporter verified");
-  } catch (error) {
-    // Log only the error message to avoid exposing secrets or network details.
-    console.error("SMTP transporter verification failed:", error.message);
-  }
-};
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendOTPEmail = async (email, otp) => {
   try {
-    const info = await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
+    const { data, error } = await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "Laptop & Printer Store <onboarding@resend.dev>",
+      to: [email],
       subject: "Your Login OTP",
-
       html: `
-        <div style="
-          font-family: Arial, sans-serif;
-          max-width: 500px;
-          margin: auto;
-          padding: 30px;
-          border: 1px solid #eee;
-          border-radius: 12px;
-        ">
+        <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 16px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h2 style="margin: 0; color: #111827;">Laptop & Printer Store</h2>
+            <p style="margin: 8px 0 0; color: #6b7280;">Your one-time login code</p>
+          </div>
 
-          <h2>Laptop & Printer Store</h2>
+          <div style="background: #f3f4f6; padding: 20px; border-radius: 12px; text-align: center; margin: 24px 0;">
+            <span style="display: inline-block; font-size: 32px; letter-spacing: 8px; font-weight: 700; color: #111827;">${otp}</span>
+          </div>
 
-          <p>Your login OTP is:</p>
-
-          <h1 style="
-            letter-spacing: 8px;
-            text-align: center;
-            background: #f1f5f9;
-            padding: 20px;
-            border-radius: 10px;
-          ">
-            ${otp}
-          </h1>
-
-          <p>
-            This OTP will expire in 5 minutes.
-          </p>
-
-          <p>
-            If you did not request this OTP, please ignore this email.
-          </p>
-
+          <p style="margin: 0 0 8px; color: #374151;">This OTP will expire in 5 minutes.</p>
+          <p style="margin: 0; color: #6b7280;">If you did not request this OTP, you can safely ignore this email.</p>
         </div>
       `,
     });
 
-    return true;
+    if (error) {
+      console.error("Resend API rejected the request. Full error:", JSON.stringify(error, null, 2));
+      throw new Error(error.message || "Failed to send OTP email");
+    }
+
+    return data;
   } catch (error) {
-    console.error("OTP email sending failed:", error.message);
-    throw error;
+    console.error("OTP email delivery failed:", error.message);
+    throw new Error("We couldn't send the verification code. Please try again.");
   }
 };
 
 module.exports = sendOTPEmail;
-module.exports.verifyEmailTransporter =
-  verifyEmailTransporter;

@@ -1,13 +1,9 @@
 const crypto = require("crypto");
 const User = require("../models/user.model");
+const Otp = require("../models/otp.model");
 const sendOTPEmail = require("../utils/sendEmail");
+const { generateOTP, hashOTP } = require("../utils/otp");
 
-const {
-  generateOTP,
-  hashOTP,
-} = require("../utils/otp");
-
-// Register
 const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -26,7 +22,8 @@ const register = async (req, res) => {
       });
     }
 
-    const existingUser = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+    const existingUser = await User.findOne({ email: normalizedEmail });
 
     if (existingUser) {
       return res.status(409).json({
@@ -36,8 +33,8 @@ const register = async (req, res) => {
     }
 
     const user = await User.create({
-      name,
-      email,
+      name: name.trim(),
+      email: normalizedEmail,
       password,
     });
 
@@ -51,7 +48,7 @@ const register = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Register error:", error);
+    console.error("Register error:", error.message);
     res.status(500).json({
       success: false,
       message: "Registration failed",
@@ -59,7 +56,6 @@ const register = async (req, res) => {
   }
 };
 
-// Login
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -71,16 +67,9 @@ const login = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
-    }
-
-    if (user.password !== password) {
+    if (!user || user.password !== password) {
       return res.status(401).json({
         success: false,
         message: "Invalid email or password",
@@ -97,13 +86,14 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("Login error:", error.message);
     res.status(500).json({
       success: false,
       message: "Login failed",
     });
   }
 };
+
 const sendOTP = async (req, res) => {
   try {
     const email = req.body.email?.trim().toLowerCase();
@@ -111,31 +101,26 @@ const sendOTP = async (req, res) => {
     if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email is required",
+        message: "Please enter a valid email address.",
       });
     }
 
-    let user = await User.findOne({ email });
-
-    // Create temporary account for a new email
-    if (!user) {
-      user = await User.create({
-        email,
-        name: "",
-        password: null,
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address.",
       });
     }
 
-    // 60-second resend protection
-    if (user.otpLastSentAt) {
+    const existingOtp = await Otp.findOne({ email }).sort({ createdAt: -1 });
+
+    if (existingOtp && existingOtp.otpLastSentAt) {
       const secondsSinceLastOTP =
-        (Date.now() - user.otpLastSentAt.getTime()) / 1000;
+        (Date.now() - existingOtp.otpLastSentAt.getTime()) / 1000;
 
       if (secondsSinceLastOTP < 60) {
-        const remaining = Math.ceil(
-          60 - secondsSinceLastOTP
-        );
-
+        const remaining = Math.ceil(60 - secondsSinceLastOTP);
         return res.status(429).json({
           success: false,
           message: `Please wait ${remaining} seconds before requesting another OTP.`,
@@ -146,15 +131,13 @@ const sendOTP = async (req, res) => {
     const otp = generateOTP();
     const otpHash = hashOTP(otp);
 
-    user.otpHash = otpHash;
-    user.otpExpires = new Date(
-      Date.now() + 5 * 60 * 1000
-    );
-
-    user.otpAttempts = 0;
-    user.otpLastSentAt = new Date();
-
-    await user.save();
+    const otpDoc = await Otp.create({
+      email,
+      otpHash,
+      otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      otpAttempts: 0,
+      otpLastSentAt: new Date(),
+    });
 
     await sendOTPEmail(email, otp);
 
@@ -162,16 +145,15 @@ const sendOTP = async (req, res) => {
       success: true,
       message: "OTP sent successfully",
     });
-
   } catch (error) {
-    console.error("Send OTP error:", error);
-
+    console.error("Send OTP error:", error.message);
     return res.status(500).json({
       success: false,
-      message: "Failed to send OTP",
+      message: "Failed to send OTP. Please try again later.",
     });
   }
 };
+
 const verifyOTP = async (req, res) => {
   try {
     const email = req.body.email?.trim().toLowerCase();
@@ -191,22 +173,17 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const otpDoc = await Otp.findOne({ email }).sort({ createdAt: -1 });
 
-    if (!user || !user.otpHash) {
+    if (!otpDoc || !otpDoc.otpHash) {
       return res.status(401).json({
         success: false,
         message: "Invalid or expired OTP",
       });
     }
 
-    // Maximum 5 attempts
-    if (user.otpAttempts >= 5) {
-      user.otpHash = null;
-      user.otpExpires = null;
-      user.otpAttempts = 0;
-
-      await user.save();
+    if (otpDoc.otpAttempts >= 5) {
+      await Otp.deleteOne({ _id: otpDoc._id });
 
       return res.status(429).json({
         success: false,
@@ -214,16 +191,8 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // Check expiry
-    if (
-      !user.otpExpires ||
-      user.otpExpires.getTime() < Date.now()
-    ) {
-      user.otpHash = null;
-      user.otpExpires = null;
-      user.otpAttempts = 0;
-
-      await user.save();
+    if (!otpDoc.otpExpiresAt || otpDoc.otpExpiresAt.getTime() < Date.now()) {
+      await Otp.deleteOne({ _id: otpDoc._id });
 
       return res.status(401).json({
         success: false,
@@ -232,54 +201,63 @@ const verifyOTP = async (req, res) => {
     }
 
     const submittedHash = hashOTP(otp);
-
     const isValid = crypto.timingSafeEqual(
       Buffer.from(submittedHash, "hex"),
-      Buffer.from(user.otpHash, "hex")
+      Buffer.from(otpDoc.otpHash, "hex")
     );
 
     if (!isValid) {
-      user.otpAttempts += 1;
+      otpDoc.otpAttempts += 1;
+      await otpDoc.save();
 
-      await user.save();
+      if (otpDoc.otpAttempts >= 5) {
+        await Otp.deleteOne({ _id: otpDoc._id });
+
+        return res.status(429).json({
+          success: false,
+          message: "Too many incorrect attempts. Please request a new OTP.",
+        });
+      }
 
       return res.status(401).json({
         success: false,
-        message: "Invalid OTP",
+        message: "Invalid OTP.",
       });
     }
 
-    // Successful verification
-    user.otpHash = null;
-    user.otpExpires = null;
-    user.otpAttempts = 0;
-    user.otpLastSentAt = null;
+    await Otp.deleteOne({ _id: otpDoc._id });
 
-    await user.save();
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        email,
+        name: "",
+        password: null,
+      });
+    }
 
     return res.status(200).json({
       success: true,
       message: "OTP login successful",
-
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
       },
     });
-
   } catch (error) {
-    console.error("Verify OTP error:", error);
-
+    console.error("Verify OTP error:", error.message);
     return res.status(500).json({
       success: false,
       message: "OTP verification failed",
     });
   }
 };
+
 module.exports = {
   register,
   login,
   sendOTP,
-  verifyOTP
+  verifyOTP,
 };
