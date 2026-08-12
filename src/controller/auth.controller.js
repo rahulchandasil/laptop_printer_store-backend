@@ -1,5 +1,11 @@
+const crypto = require("crypto");
 const User = require("../models/user.model");
 const sendOTPEmail = require("../utils/sendEmail");
+
+const {
+  generateOTP,
+  hashOTP,
+} = require("../utils/otp");
 
 // Register
 const register = async (req, res) => {
@@ -45,10 +51,10 @@ const register = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Register error:", error);
     res.status(500).json({
       success: false,
       message: "Registration failed",
-      error: error.message,
     });
   }
 };
@@ -91,16 +97,16 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Login error:", error);
     res.status(500).json({
       success: false,
       message: "Login failed",
-      error: error.message,
     });
   }
 };
 const sendOTP = async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
 
     if (!email) {
       return res.status(400).json({
@@ -109,25 +115,50 @@ const sendOTP = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    let user = await User.findOne({ email });
 
+    // Create temporary account for a new email
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found. Please register first.",
+      user = await User.create({
+        email,
+        name: "",
+        password: null,
       });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // 60-second resend protection
+    if (user.otpLastSentAt) {
+      const secondsSinceLastOTP =
+        (Date.now() - user.otpLastSentAt.getTime()) / 1000;
 
-    user.otp = otp;
-    user.otpExpires = new Date(Date.now() + 5 * 60 * 1000);
+      if (secondsSinceLastOTP < 60) {
+        const remaining = Math.ceil(
+          60 - secondsSinceLastOTP
+        );
+
+        return res.status(429).json({
+          success: false,
+          message: `Please wait ${remaining} seconds before requesting another OTP.`,
+        });
+      }
+    }
+
+    const otp = generateOTP();
+    const otpHash = hashOTP(otp);
+
+    user.otpHash = otpHash;
+    user.otpExpires = new Date(
+      Date.now() + 5 * 60 * 1000
+    );
+
+    user.otpAttempts = 0;
+    user.otpLastSentAt = new Date();
 
     await user.save();
 
     await sendOTPEmail(email, otp);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "OTP sent successfully",
     });
@@ -135,18 +166,16 @@ const sendOTP = async (req, res) => {
   } catch (error) {
     console.error("Send OTP error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to send OTP",
-      ...(process.env.NODE_ENV === "development" && {
-        error: error.message,
-      }),
     });
   }
 };
 const verifyOTP = async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
+    const otp = req.body.otp?.trim();
 
     if (!email || !otp) {
       return res.status(400).json({
@@ -155,37 +184,83 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({
+    if (!/^\d{6}$/.test(otp)) {
+      return res.status(400).json({
         success: false,
-        message: "User not found",
+        message: "OTP must be 6 digits",
       });
     }
 
-    if (!user.otp || user.otp !== otp) {
+    const user = await User.findOne({ email });
+
+    if (!user || !user.otpHash) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    // Maximum 5 attempts
+    if (user.otpAttempts >= 5) {
+      user.otpHash = null;
+      user.otpExpires = null;
+      user.otpAttempts = 0;
+
+      await user.save();
+
+      return res.status(429).json({
+        success: false,
+        message: "Too many incorrect attempts. Please request a new OTP.",
+      });
+    }
+
+    // Check expiry
+    if (
+      !user.otpExpires ||
+      user.otpExpires.getTime() < Date.now()
+    ) {
+      user.otpHash = null;
+      user.otpExpires = null;
+      user.otpAttempts = 0;
+
+      await user.save();
+
+      return res.status(401).json({
+        success: false,
+        message: "OTP has expired. Please request a new OTP.",
+      });
+    }
+
+    const submittedHash = hashOTP(otp);
+
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(submittedHash, "hex"),
+      Buffer.from(user.otpHash, "hex")
+    );
+
+    if (!isValid) {
+      user.otpAttempts += 1;
+
+      await user.save();
+
       return res.status(401).json({
         success: false,
         message: "Invalid OTP",
       });
     }
 
-    if (!user.otpExpires || user.otpExpires < new Date()) {
-      return res.status(401).json({
-        success: false,
-        message: "OTP has expired",
-      });
-    }
-
-    user.otp = null;
+    // Successful verification
+    user.otpHash = null;
     user.otpExpires = null;
+    user.otpAttempts = 0;
+    user.otpLastSentAt = null;
 
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "OTP login successful",
+
       user: {
         id: user._id,
         name: user.name,
@@ -196,10 +271,9 @@ const verifyOTP = async (req, res) => {
   } catch (error) {
     console.error("Verify OTP error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "OTP verification failed",
-      error: error.message,
     });
   }
 };

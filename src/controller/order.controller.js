@@ -79,7 +79,6 @@ const createOrder = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to create order",
-      error: error.message,
     });
   }
 };
@@ -97,10 +96,10 @@ const getUserOrders = async (req, res) => {
       orders,
     });
   } catch (error) {
+    console.error("Get user orders error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get orders",
-      error: error.message,
     });
   }
 };

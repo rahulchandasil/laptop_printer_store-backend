@@ -1,7 +1,5 @@
 const nodemailer = require("nodemailer");
 
-console.log("EMAIL_USER configured:", Boolean(process.env.EMAIL_USER));
-console.log("EMAIL_PASS configured:", Boolean(process.env.EMAIL_PASS));
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -14,34 +12,63 @@ const transporter = nodemailer.createTransport({
 const verifyEmailTransporter = async () => {
   try {
     await transporter.verify();
-    console.log("SMTP transporter verified");
+    return true;
   } catch (error) {
-    console.error("SMTP transporter verification failed:", error.message);
+    console.error("SMTP transporter verification failed:", error);
+    return false;
   }
 };
 
 const sendOTPEmail = async (email, otp) => {
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Your Login OTP",
-    html: `
-      <div style="font-family: Arial; padding: 20px;">
-        <h2>Laptop & Printer Store</h2>
+  try {
+    const info = await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Login OTP",
 
-        <p>Your login OTP is:</p>
+      html: `
+        <div style="
+          font-family: Arial, sans-serif;
+          max-width: 500px;
+          margin: auto;
+          padding: 30px;
+          border: 1px solid #eee;
+          border-radius: 12px;
+        ">
 
-        <h1 style="letter-spacing: 8px;">
-          ${otp}
-        </h1>
+          <h2>Laptop & Printer Store</h2>
 
-        <p>This OTP will expire in 5 minutes.</p>
+          <p>Your login OTP is:</p>
 
-        <p>If you did not request this OTP, please ignore this email.</p>
-      </div>
-    `,
-  });
+          <h1 style="
+            letter-spacing: 8px;
+            text-align: center;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 10px;
+          ">
+            ${otp}
+          </h1>
+
+          <p>
+            This OTP will expire in 5 minutes.
+          </p>
+
+          <p>
+            If you did not request this OTP, please ignore this email.
+          </p>
+
+        </div>
+      `,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("OTP email failed:", error);
+    throw error;
+  }
 };
 
 module.exports = sendOTPEmail;
-module.exports.verifyEmailTransporter = verifyEmailTransporter;
+module.exports.verifyEmailTransporter =
+  verifyEmailTransporter;

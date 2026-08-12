@@ -23,10 +23,10 @@ const getCart = async (req, res) => {
       cart,
     });
   } catch (error) {
+    console.error("Get cart error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get cart",
-      error: error.message,
     });
   }
 };
@@ -90,10 +90,10 @@ const addToCart = async (req, res) => {
       cart,
     });
   } catch (error) {
+    console.error("Add to cart error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to add product",
-      error: error.message,
     });
   }
 };
@@ -142,10 +142,10 @@ const updateCartItem = async (req, res) => {
       cart,
     });
   } catch (error) {
+    console.error("Update cart item error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update cart",
-      error: error.message,
     });
   }
 };
@@ -177,10 +177,10 @@ const removeFromCart = async (req, res) => {
       cart,
     });
   } catch (error) {
+    console.error("Remove from cart error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to remove product",
-      error: error.message,
     });
   }
 };

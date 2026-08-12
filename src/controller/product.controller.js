@@ -26,10 +26,10 @@ const getProducts = async (req, res) => {
       products,
     });
   } catch (error) {
+    console.error("Get products error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch products",
-      error: error.message,
     });
   }
 };
@@ -51,10 +51,10 @@ const getProductById = async (req, res) => {
       product,
     });
   } catch (error) {
+    console.error("Get product error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch product",
-      error: error.message,
     });
   }
 };
@@ -84,10 +84,10 @@ const createProduct = async (req, res) => {
       product,
     });
   } catch (error) {
+    console.error("Create product error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create product",
-      error: error.message,
     });
   }
 };

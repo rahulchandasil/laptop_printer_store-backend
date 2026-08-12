@@ -4,8 +4,8 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
       trim: true,
+      default: "",
     },
 
     email: {
@@ -18,10 +18,11 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: true,
       minlength: 6,
+      default: null,
     },
-    otp: {
+
+    otpHash: {
       type: String,
       default: null,
     },
@@ -30,10 +31,20 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    otpAttempts: {
+      type: Number,
+      default: 0,
+    },
+
+    otpLastSentAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 module.exports = mongoose.model("User", userSchema);
