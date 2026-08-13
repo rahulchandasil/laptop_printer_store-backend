@@ -3,7 +3,9 @@ const User = require("../models/user.model");
 const Otp = require("../models/otp.model");
 const sendOTPEmail = require("../utils/sendEmail");
 const { generateOTP, hashOTP } = require("../utils/otp");
+const { OAuth2Client } = require("google-auth-library");
 
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -255,9 +257,73 @@ const verifyOTP = async (req, res) => {
   }
 };
 
+const googleLogin = async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ success: false, message: "Credential is required" });
+    }
+
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const email = payload.email.trim().toLowerCase();
+    const name = payload.name;
+    const googleId = payload.sub;
+    const picture = payload.picture;
+    const email_verified = payload.email_verified;
+
+    if (!email_verified) {
+      return res.status(401).json({ success: false, message: "Google email is not verified." });
+    }
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        email,
+        name,
+        password: null,
+        googleId,
+        provider: "google",
+        picture,
+      });
+    } else {
+      // Link the google account if not linked
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.provider = "google"; // or keep as local, but signify google is linked
+        if (!user.picture) user.picture = picture;
+        await user.save();
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Google login successful",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        picture: user.picture,
+      },
+    });
+  } catch (error) {
+    console.error("Google Login error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Google login failed",
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
   sendOTP,
   verifyOTP,
+  googleLogin,
 };
