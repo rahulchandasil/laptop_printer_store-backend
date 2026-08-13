@@ -18,6 +18,14 @@ const getCart = async (req, res) => {
       });
     }
 
+    // Automatically clean up deleted products
+    const originalLength = cart.items.length;
+    cart.items = cart.items.filter((item) => item.productId != null);
+    
+    if (cart.items.length !== originalLength) {
+      await cart.save();
+    }
+
     res.status(200).json({
       success: true,
       cart,

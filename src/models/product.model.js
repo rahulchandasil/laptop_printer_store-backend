@@ -35,6 +35,32 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    specifications: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+
+    originalPrice: {
+      type: Number,
+      min: 0,
+    },
+
+    rating: {
+      type: Number,
+      min: 0,
+      max: 5,
+    },
+
+    reviewCount: {
+      type: Number,
+      default: 0,
+    },
+
+    isNewLaunch: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
