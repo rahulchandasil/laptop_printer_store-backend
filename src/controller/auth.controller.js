@@ -285,7 +285,7 @@ const googleLogin = async (req, res) => {
     if (!user) {
       user = await User.create({
         email,
-        name,
+        name: "", // Will be filled in Complete Profile step
         password: null,
         googleId,
         provider: "google",
@@ -320,10 +320,51 @@ const googleLogin = async (req, res) => {
   }
 };
 
+const completeProfile = async (req, res) => {
+  try {
+    const { userId, name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Name is required" });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User ID is required" });
+    }
+
+    let user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    user.name = name.trim();
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile completed successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        picture: user.picture,
+      },
+    });
+  } catch (error) {
+    console.error("Complete Profile error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to complete profile",
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
   sendOTP,
   verifyOTP,
   googleLogin,
+  completeProfile,
 };
