@@ -9,12 +9,14 @@ const {
 
 const cartRouter = express.Router();
 
-cartRouter.get("/:userId", getCart);
+const { authenticate } = require("../middleware/auth.middleware.js");
 
-cartRouter.post("/:userId", addToCart);
+cartRouter.get("/", authenticate, getCart);
 
-cartRouter.put("/:userId/:productId", updateCartItem);
+cartRouter.post("/", authenticate, addToCart);
 
-cartRouter.delete("/:userId/:productId", removeFromCart);
+cartRouter.put("/:productId", authenticate, updateCartItem);
+
+cartRouter.delete("/:productId", authenticate, removeFromCart);
 
 module.exports = cartRouter;

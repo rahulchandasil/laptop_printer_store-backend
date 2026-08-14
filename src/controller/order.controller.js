@@ -1,11 +1,12 @@
 const Order = require("../models/order.model.js");
 const Cart = require("../models/cart.model.js");
+const Product = require("../models/product.model.js");
 const mongoose = require("mongoose");
 
 const createOrder = async (req, res) => {
   try {
+    const userId = req.user._id;
     const {
-      userId,
       items,
       name,
       mobile,
@@ -21,13 +22,6 @@ const createOrder = async (req, res) => {
         Number(item.quantity) >= 1
     );
 
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid userId is required",
-      });
-    }
-
     if (!validItems) {
       return res.status(400).json({
         success: false,
@@ -41,24 +35,45 @@ const createOrder = async (req, res) => {
       typeof mobile !== "string" ||
       !mobile.trim() ||
       typeof address !== "string" ||
-      !address.trim() ||
-      typeof totalPrice !== "number" ||
-      !Number.isFinite(totalPrice) ||
-      totalPrice < 0
+      !address.trim()
     ) {
       return res.status(400).json({
         success: false,
-        message: "Name, mobile, address, and a valid totalPrice are required",
+        message: "Name, mobile, and address are required",
       });
+    }
+
+    // Fetch product details for all items to save snapshot
+    const enrichedItems = [];
+    let calculatedTotal = 0;
+    
+    for (const item of items) {
+      const product = await Product.findById(item.productId);
+      if (product) {
+        enrichedItems.push({
+          productId: product._id,
+          quantity: item.quantity,
+          price: product.price,
+          name: product.name,
+          image: product.image,
+        });
+        calculatedTotal += product.price * item.quantity;
+      } else {
+        // If product is missing for some reason during checkout, we reject the order
+        return res.status(400).json({
+          success: false,
+          message: `Product with ID ${item.productId} not found`,
+        });
+      }
     }
 
     const order = await Order.create({
       userId,
-      items,
+      items: enrichedItems,
       name: name.trim(),
       mobile: mobile.trim(),
       address: address.trim(),
-      totalPrice,
+      totalPrice: calculatedTotal,
     });
 
     // Clear user's cart after successful order
@@ -83,11 +98,16 @@ const createOrder = async (req, res) => {
   }
 };
 
-const getUserOrders = async (req, res) => {
+const getMyOrders = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user._id;
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    const orders = await Order.find({ userId })
+    const orders = await Order.find({ 
+      userId, 
+      createdAt: { $gte: sixMonthsAgo } 
+    })
       .populate("items.productId")
       .sort({ createdAt: -1 });
 
@@ -96,7 +116,7 @@ const getUserOrders = async (req, res) => {
       orders,
     });
   } catch (error) {
-    console.error("Get user orders error:", error);
+    console.error("Get my orders error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get orders",
@@ -104,7 +124,47 @@ const getUserOrders = async (req, res) => {
   }
 };
 
+const getOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ success: false, message: "Invalid order ID" });
+    }
+
+    const order = await Order.findById(orderId).populate("items.productId");
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    if (order.userId.toString() !== userId.toString()) {
+      return res.status(403).json({ success: false, message: "Unauthorized access to order" });
+    }
+
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    if (order.createdAt < sixMonthsAgo) {
+      return res.status(403).json({ success: false, message: "Order is older than 6 months and cannot be viewed" });
+    }
+
+    res.status(200).json({
+      success: true,
+      order,
+    });
+  } catch (error) {
+    console.error("Get order by ID error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get order details",
+    });
+  }
+};
+
 module.exports = {
   createOrder,
-  getUserOrders,
+  getMyOrders,
+  getOrderById,
 };

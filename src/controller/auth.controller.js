@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 const Otp = require("../models/otp.model");
 const sendOTPEmail = require("../utils/sendEmail");
@@ -6,6 +7,12 @@ const { generateOTP, hashOTP } = require("../utils/otp");
 const { OAuth2Client } = require("google-auth-library");
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is not configured");
+}
+
 const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -40,9 +47,12 @@ const register = async (req, res) => {
       password,
     });
 
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+
     res.status(201).json({
       success: true,
       message: "Registration successful",
+      token,
       user: {
         id: user._id,
         name: user.name,
@@ -78,9 +88,12 @@ const login = async (req, res) => {
       });
     }
 
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+
     res.status(200).json({
       success: true,
       message: "Login successful",
+      token,
       user: {
         id: user._id,
         name: user.name,
@@ -239,9 +252,12 @@ const verifyOTP = async (req, res) => {
       });
     }
 
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+
     return res.status(200).json({
       success: true,
       message: "OTP login successful",
+      token,
       user: {
         id: user._id,
         name: user.name,
@@ -301,9 +317,12 @@ const googleLogin = async (req, res) => {
       }
     }
 
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+
     return res.status(200).json({
       success: true,
       message: "Google login successful",
+      token,
       user: {
         id: user._id,
         name: user.name,
@@ -322,14 +341,11 @@ const googleLogin = async (req, res) => {
 
 const completeProfile = async (req, res) => {
   try {
-    const { userId, name } = req.body;
+    const { name } = req.body;
+    const userId = req.user._id;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: "Name is required" });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ success: false, message: "User ID is required" });
     }
 
     let user = await User.findById(userId);
@@ -341,9 +357,12 @@ const completeProfile = async (req, res) => {
     user.name = name.trim();
     await user.save();
 
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+
     return res.status(200).json({
       success: true,
       message: "Profile completed successfully",
+      token,
       user: {
         id: user._id,
         name: user.name,
