@@ -9,7 +9,11 @@ const orderRouter = require("./routes/order.routes.js");
 
 const app = express();
 
-app.use(cors());
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get("/", (req, res) => {

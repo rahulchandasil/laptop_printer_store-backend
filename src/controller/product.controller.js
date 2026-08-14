@@ -77,15 +77,10 @@ const getProductById = async (req, res) => {
 };
 const createProduct = async (req, res) => {
   try {
-    console.log("FULL REQUEST BODY:");
-    console.log(JSON.stringify(req.body, null, 2));
-
     let { 
       name, category, brand, description, price, image, 
       specifications, originalPrice, rating, reviewCount, images, isNewLaunch 
     } = req.body;
-
-    console.log("SPECIFICATIONS RECEIVED:", specifications);
 
     // If specifications was sent as a JSON string, parse it safely
     if (typeof specifications === "string") {
